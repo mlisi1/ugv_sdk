@@ -24,7 +24,8 @@
 
 namespace westonrobot {
 struct CoreStateMsgGroup {
-  SdkTimePoint time_stamp;
+  SdkTimePoint time_stamp;          // last core message of any type
+  SdkTimePoint motion_state_stamp;  // last motion state (odometry) message
 
   SystemStateMessage system_state;
   MotionStateMessage motion_state;
@@ -39,6 +40,9 @@ struct ActuatorStateMsgGroup {
   ActuatorHSStateMessage actuator_hs_state[AGX_MAX_ACTUATOR_NUM];  // v2 only
   ActuatorLSStateMessage actuator_ls_state[AGX_MAX_ACTUATOR_NUM];  // v2 only
   ActuatorStateMessageV1 actuator_state[AGX_MAX_ACTUATOR_NUM];     // v1 only
+  // slot i (motor_id i, CAN id 0x251 + i / 0x261 + i) has received at least one frame
+  bool actuator_hs_received[AGX_MAX_ACTUATOR_NUM];  // v2 only
+  bool actuator_ls_received[AGX_MAX_ACTUATOR_NUM];  // v2 only
 
   MotorAngleMessage motor_angles;  // ranger only
   MotorSpeedMessage motor_speeds;  // ranger only
@@ -197,15 +201,15 @@ class AgilexBase : public RobotCommonInterface {
 
   /* feedback group 1: core state */
   std::mutex core_state_mtx_;
-  CoreStateMsgGroup core_state_msgs_;
+  CoreStateMsgGroup core_state_msgs_{};
 
   /* feedback group 2: actuator state */
   std::mutex actuator_state_mtx_;
-  ActuatorStateMsgGroup actuator_state_msgs_;
+  ActuatorStateMsgGroup actuator_state_msgs_{};
 
   /* feedback group 3: common sensor */
   std::mutex common_sensor_state_mtx_;
-  CommonSensorStateMsgGroup common_sensor_state_msgs_;
+  CommonSensorStateMsgGroup common_sensor_state_msgs_{};
 
   std::mutex version_str_buf_mtx_;
   std::string version_string_buffer_;
@@ -296,6 +300,7 @@ class AgilexBase : public RobotCommonInterface {
       case AgxMsgMotionState: {
         // std::cout << "motion control feedback received" << std::endl;
         core_state_msgs_.time_stamp = SdkClock::now();
+        core_state_msgs_.motion_state_stamp = core_state_msgs_.time_stamp;
         core_state_msgs_.motion_state = status_msg.body.motion_state_msg;
         break;
       }
@@ -351,23 +356,28 @@ class AgilexBase : public RobotCommonInterface {
       }
       case AgxMsgActuatorHSState: {
         // std::cout << "actuator hs feedback received" << std::endl;
+        const uint8_t id = status_msg.body.actuator_hs_state_msg.motor_id;
+        if (id >= AGX_MAX_ACTUATOR_NUM) break;
         actuator_state_msgs_.time_stamp = SdkClock::now();
-        actuator_state_msgs_
-            .actuator_hs_state[status_msg.body.actuator_hs_state_msg.motor_id] =
+        actuator_state_msgs_.actuator_hs_state[id] =
             status_msg.body.actuator_hs_state_msg;
+        actuator_state_msgs_.actuator_hs_received[id] = true;
         break;
       }
       case AgxMsgActuatorLSState: {
         // std::cout << "actuator ls feedback received" << std::endl;
-        actuator_state_msgs_
-            .actuator_ls_state[status_msg.body.actuator_ls_state_msg.motor_id] =
+        const uint8_t id = status_msg.body.actuator_ls_state_msg.motor_id;
+        if (id >= AGX_MAX_ACTUATOR_NUM) break;
+        actuator_state_msgs_.actuator_ls_state[id] =
             status_msg.body.actuator_ls_state_msg;
+        actuator_state_msgs_.actuator_ls_received[id] = true;
         break;
       }
       case AgxMsgActuatorStateV1: {
         // std::cout << "actuator v1 feedback received" << std::endl;
-        actuator_state_msgs_
-            .actuator_state[status_msg.body.v1_actuator_state_msg.motor_id] =
+        const uint8_t id = status_msg.body.v1_actuator_state_msg.motor_id;
+        if (id >= AGX_MAX_ACTUATOR_NUM) break;
+        actuator_state_msgs_.actuator_state[id] =
             status_msg.body.v1_actuator_state_msg;
         break;
       }

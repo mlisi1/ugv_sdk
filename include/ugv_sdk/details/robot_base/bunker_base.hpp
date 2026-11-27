@@ -42,6 +42,7 @@ class BunkerBase : public AgilexBase<ParserType>, public BunkerInterface {
 
     BunkerCoreState bunker_state;
     bunker_state.time_stamp = state.time_stamp;
+    bunker_state.motion_state_stamp = state.motion_state_stamp;
     bunker_state.system_state = state.system_state;
     bunker_state.motion_state = state.motion_state;
     bunker_state.rc_state = state.rc_state;
@@ -51,11 +52,22 @@ class BunkerBase : public AgilexBase<ParserType>, public BunkerInterface {
   BunkerActuatorState GetActuatorState() override {
     auto actuator = AgilexBase<ParserType>::GetActuatorStateMsgGroup();
 
-    BunkerActuatorState bunker_actuator;
+    BunkerActuatorState bunker_actuator{};
     bunker_actuator.time_stamp = actuator.time_stamp;
+    // v2: the drivers don't necessarily start at motor_id 0 (Bunker Pro: 1 and 2), so take the
+    // first two that have reported instead of slots 0 and 1
+    int n = 0;
+    for (int id = 0; id < AGX_MAX_ACTUATOR_NUM && n < 2; ++id) {
+      if (!actuator.actuator_hs_received[id] && !actuator.actuator_ls_received[id]) continue;
+      bunker_actuator.actuator_hs_state[n] = actuator.actuator_hs_state[id];
+      bunker_actuator.actuator_ls_state[n] = actuator.actuator_ls_state[id];
+      bunker_actuator.actuator_hs_state[n].motor_id = id;
+      bunker_actuator.actuator_ls_state[n].motor_id = id;
+      ++n;
+    }
+    bunker_actuator.actuator_num = n;
+    // v1 robots: slots 0 and 1, as before
     for (int i = 0; i < 2; ++i) {
-      bunker_actuator.actuator_hs_state[i] = actuator.actuator_hs_state[i];
-      bunker_actuator.actuator_ls_state[i] = actuator.actuator_ls_state[i];
       bunker_actuator.actuator_state[i] = actuator.actuator_state[i];
     }
     return bunker_actuator;

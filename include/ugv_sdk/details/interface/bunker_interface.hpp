@@ -17,7 +17,8 @@
 
 namespace westonrobot {
 struct BunkerCoreState {
-  SdkTimePoint time_stamp;
+  SdkTimePoint time_stamp;          // last core message of any type
+  SdkTimePoint motion_state_stamp;  // last motion state message
 
   SystemStateMessage system_state;
   MotionStateMessage motion_state;
@@ -27,7 +28,10 @@ struct BunkerCoreState {
 struct BunkerActuatorState {
   SdkTimePoint time_stamp;
 
-  // actuator state
+  // actuator state (v2): the drivers that have reported, in ascending motor_id order (the
+  // Bunker Pro's two drivers are motor_id 1 and 2, CAN 0x252/0x253 and 0x262/0x263).
+  // actuator_num = how many of the slots are valid (0..2); each slot keeps its real motor_id.
+  int actuator_num;
   ActuatorHSStateMessage actuator_hs_state[2];
   ActuatorLSStateMessage actuator_ls_state[2];
   // - for v1 robots only
